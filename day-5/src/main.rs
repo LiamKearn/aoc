@@ -1,7 +1,7 @@
 use crate::{instruction_parser::parse_instruction, stacks_parser::parse_lines};
 use std::{
     fmt::{Debug, Display, Write},
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut}, thread::sleep, time::Duration,
 };
 
 pub mod instruction_parser;
@@ -224,7 +224,7 @@ where
     for instruction in raw_instructions.lines() {
         let moove = parse_instruction(instruction).unwrap().1;
         if animation_duration > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(animation_duration));
+            sleep(Duration::from_millis(animation_duration));
             print!("{}", "\n".repeat(100));
             print!("{}[2J", 27 as char);
         }
@@ -252,7 +252,7 @@ where
         return result;
     }
 
-    std::thread::sleep(std::time::Duration::from_millis(animation_duration));
+    sleep(Duration::from_millis(2000));
 
     result
 }
