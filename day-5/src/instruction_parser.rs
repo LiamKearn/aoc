@@ -10,6 +10,7 @@ use nom::{
     IResult,
 };
 
+#[allow(clippy::missing_errors_doc)]
 pub fn parse_instruction(i: &str) -> IResult<&str, Move> {
     let (i, ((operation, qty), _, (_, from), _, (_, to))) = tuple((
         parse_specifier_numerator_pair,

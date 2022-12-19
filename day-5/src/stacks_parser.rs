@@ -37,6 +37,7 @@ fn parse_line(i: &[u8]) -> IResult<&[u8], Vec<Option<char>>> {
     Ok((i, all))
 }
 
+#[allow(clippy::missing_errors_doc)]
 pub fn parse_lines(i: &[u8]) -> IResult<&[u8], Vec<Vec<Option<char>>>> {
     many1(parse_line)(i)
 }

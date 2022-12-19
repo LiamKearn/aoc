@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use crate::{instruction_parser::parse_instruction, stacks_parser::parse_lines};
 use std::{
     fmt::{Debug, Display, Write},
@@ -29,11 +27,11 @@ impl Display for Crate {
 }
 
 #[derive(Default)]
-pub struct Stacks<T> {
-    inner: Vec<Vec<T>>,
+pub struct Stacks {
+    inner: Vec<Vec<Crate>>,
 }
 
-impl<T> Stacks<T> {
+impl Stacks {
     fn height(&self) -> usize {
         self.inner.iter().map(Vec::len).max().unwrap()
     }
@@ -42,11 +40,11 @@ impl<T> Stacks<T> {
         self.inner.len()
     }
 
-    fn pop_from_column(&mut self, column: usize) -> Option<T> {
+    fn pop_from_column(&mut self, column: usize) -> Option<Crate> {
         self.inner.index_mut(column).pop()
     }
 
-    fn push_to_column(&mut self, column: usize, element: T) {
+    fn push_to_column(&mut self, column: usize, element: Crate) {
         if let Some(existing) = self.inner.get_mut(column) {
             existing.push(element);
         } else {
@@ -55,12 +53,10 @@ impl<T> Stacks<T> {
         }
     }
 
-    fn index_column(&self, column: usize, row: usize) -> Option<&T> {
+    fn index_column(&self, column: usize, row: usize) -> Option<&Crate> {
         self.inner.index(column).get(row)
     }
-}
 
-impl Stacks<Crate> {
     fn get_message(&self) -> String {
         self.inner
             .iter()
@@ -69,7 +65,7 @@ impl Stacks<Crate> {
             .collect::<String>()
     }
 
-    fn parse(input: &str) -> Stacks<Crate> {
+    fn parse(input: &str) -> Stacks {
         // The last line, this should be stack indices, we can be remove this and use it to assert parse correctness.
         let stack_indices = input.lines().last().unwrap();
         let suposed_stack_count: usize = stack_indices.chars().filter(char::is_ascii_digit).count();
@@ -86,7 +82,7 @@ impl Stacks<Crate> {
             "The parsed indicies don't align with the crates we parsed"
         );
 
-        let mut stacks: Stacks<Crate> = Stacks::default();
+        let mut stacks = Stacks::default();
         for (column_idx, column) in stack_rows.iter().enumerate() {
             let column_items = column
                 .iter()
@@ -104,7 +100,7 @@ impl Stacks<Crate> {
     }
 }
 
-impl Display for Stacks<Crate> {
+impl Display for Stacks {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Render crates.
         for row in (0..=self.height()).rev() {
@@ -135,10 +131,6 @@ impl Display for Stacks<Crate> {
     }
 }
 
-pub trait OP<T> {
-    fn enact(&self, target: &mut Stacks<T>, animation_duration: u64) -> Option<()>;
-}
-
 #[derive(Debug, PartialEq)]
 pub struct Move {
     qty: usize,
@@ -158,66 +150,22 @@ impl Display for Move {
     }
 }
 
-impl OP<Crate> for Move {
-    fn enact(&self, target: &mut Stacks<Crate>, animation_duration: u64) -> Option<()> {
-        #[cfg(debug_assertions)]
-        {
-            println!("\nApplied `{self}`:");
-        }
-
-        for _ in 1..=self.qty {
-            let krate = target.pop_from_column(self.from - 1)?;
-            target.push_to_column(self.to - 1, krate);
-        }
-
-        #[cfg(debug_assertions)]
-        {
-            println!("{target}");
-        }
-        if animation_duration > 0 {
-            println!("{target}");
-            println!("Applied `{self}`.");
-        }
-
-        Some(())
+fn enact_move_part_1(stacks: &mut Stacks, moove: &Move) {
+    for _ in 1..=moove.qty {
+        let krate = stacks.pop_from_column(moove.from - 1).unwrap();
+        stacks.push_to_column(moove.to - 1, krate);
     }
 }
 
-fn solve_part_1(input: &str, animation_duration: u64) -> String {
-    let (raw_stacks, raw_instructions) = input.split_once("\n\n").unwrap();
+fn enact_move_part_2(stacks: &mut Stacks, moove: &Move) {
+    let picked_up: Vec<Crate> = (1..=moove.qty)
+        .map(|_| stacks.pop_from_column(moove.from - 1).unwrap())
+        .collect();
 
-    let mut stacks = Stacks::parse(raw_stacks);
-
-    #[cfg(debug_assertions)]
-    {
-        println!("Initial stack:");
-        println!("{stacks}");
+    for krate in picked_up.into_iter().rev() {
+        stacks.push_to_column(moove.to - 1, krate);
     }
-
-    if animation_duration > 0 {
-        // CBA using crossterm lol.
-        print!("{}", "\n".repeat(100));
-        println!("{stacks}");
-    }
-
-    for instruction in raw_instructions.lines() {
-        let moove = parse_instruction(instruction).unwrap().1;
-        if animation_duration > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(animation_duration));
-            print!("{}", "\n".repeat(100));
-            print!("{}[2J", 27 as char);
-        }
-        moove.enact(&mut stacks, animation_duration);
-    }
-
-    stacks.get_message()
 }
-
-fn solve_part_2(input: &str, animation_duration: u64) -> String {
-    todo!()
-}
-
-trait DisplayMarker {}
 
 enum Part {
     One(Stage),
@@ -247,9 +195,9 @@ impl Display for Stage {
     }
 }
 
-fn solve_animated<F>(part: Part, solver: F, input: &str, animation_duration: u64)
+fn solve_animated<F>(part: &Part, solver: F, input: &str, animation_duration: u64) -> String
 where
-    F: Fn(&str, u64) -> String,
+    F: Fn(&mut Stacks, &Move),
 {
     if animation_duration > 0 {
         for _ in 0..10 {
@@ -257,13 +205,56 @@ where
         }
     }
 
-    let res = solver(input, animation_duration);
-    println!("Solved {part} {res}");
+    let (raw_stacks, raw_instructions) = input.split_once("\n\n").unwrap();
+
+    let mut stacks = Stacks::parse(raw_stacks);
+
+    #[cfg(debug_assertions)]
+    {
+        println!("Initial stack:");
+        println!("{stacks}");
+    }
+
+    if animation_duration > 0 {
+        // CBA using crossterm lol.
+        print!("{}", "\n".repeat(100));
+        println!("{stacks}");
+    }
+
+    for instruction in raw_instructions.lines() {
+        let moove = parse_instruction(instruction).unwrap().1;
+        if animation_duration > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(animation_duration));
+            print!("{}", "\n".repeat(100));
+            print!("{}[2J", 27 as char);
+        }
+        #[cfg(debug_assertions)]
+        {
+            println!("\nApplied `{moove}`:");
+        }
+
+        solver(&mut stacks, &moove);
+
+        #[cfg(debug_assertions)]
+        {
+            println!("{stacks}");
+        }
+        if animation_duration > 0 {
+            println!("{stacks}");
+            println!("Applied `{moove}`.");
+        }
+    }
+
+    let result = stacks.get_message();
+
+    println!("Solved {part} {result}");
     if animation_duration < 1 {
-        return;
+        return result;
     }
 
     std::thread::sleep(std::time::Duration::from_millis(animation_duration));
+
+    result
 }
 
 fn main() {
@@ -271,22 +262,87 @@ fn main() {
     let mut animation_duration = 0;
     let mut args = std::env::args();
     if args.nth(1).is_some() {
-        animation_duration = args.next().expect("Supply a frame duration in milis").parse::<u64>().unwrap();
+        animation_duration = args
+            .next()
+            .expect("Supply a frame duration in milis")
+            .parse::<u64>()
+            .unwrap();
     }
-    solve_animated(Part::One(Stage::Example), solve_part_1, EXAMPLE_INPUT, animation_duration);
-    solve_animated(Part::One(Stage::Actual), solve_part_1, ACTUAL_INPUT, animation_duration);
-    solve_animated(Part::Two(Stage::Example), solve_part_1, EXAMPLE_INPUT, animation_duration);
-    solve_animated(Part::Two(Stage::Actual), solve_part_1, ACTUAL_INPUT, animation_duration);
+    solve_animated(
+        &Part::One(Stage::Example),
+        enact_move_part_1,
+        EXAMPLE_INPUT,
+        animation_duration,
+    );
+    solve_animated(
+        &Part::One(Stage::Actual),
+        enact_move_part_1,
+        ACTUAL_INPUT,
+        animation_duration,
+    );
+    solve_animated(
+        &Part::Two(Stage::Example),
+        enact_move_part_2,
+        EXAMPLE_INPUT,
+        animation_duration,
+    );
+    solve_animated(
+        &Part::Two(Stage::Actual),
+        enact_move_part_2,
+        ACTUAL_INPUT,
+        animation_duration,
+    );
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{solve_part_1, ACTUAL_INPUT, EXAMPLE_INPUT};
+    use crate::{
+        enact_move_part_1, enact_move_part_2, solve_animated, Part, Stage, ACTUAL_INPUT,
+        EXAMPLE_INPUT,
+    };
 
     #[test]
     fn test_part_1() {
-        assert_eq!(solve_part_1(EXAMPLE_INPUT, 0), "CMZ".to_string());
-        assert_eq!(solve_part_1(ACTUAL_INPUT, 0), "ZWHVFWQWW".to_string());
+        assert_eq!(
+            solve_animated(
+                &Part::One(Stage::Example),
+                enact_move_part_1,
+                EXAMPLE_INPUT,
+                0
+            ),
+            "CMZ".to_string()
+        );
+        assert_eq!(
+            solve_animated(
+                &Part::One(Stage::Actual),
+                enact_move_part_1,
+                ACTUAL_INPUT,
+                0
+            ),
+            "ZWHVFWQWW".to_string()
+        );
+    }
+
+    #[test]
+    fn test_part_2() {
+        assert_eq!(
+            solve_animated(
+                &Part::Two(Stage::Example),
+                enact_move_part_2,
+                EXAMPLE_INPUT,
+                0
+            ),
+            "MCD".to_string()
+        );
+        assert_eq!(
+            solve_animated(
+                &Part::Two(Stage::Actual),
+                enact_move_part_2,
+                ACTUAL_INPUT,
+                0
+            ),
+            "HZFZCCWWV".to_string()
+        );
     }
 }
 
